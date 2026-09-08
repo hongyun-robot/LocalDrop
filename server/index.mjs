@@ -42,15 +42,26 @@ function send(socket, message) {
 }
 
 function broadcastDevices() {
-  const devices = [...sockets.entries()]
-    .filter(([, client]) => client.readyState === WebSocket.OPEN && client.device)
-    .map(([id, client]) => ({ id, ...client.device }))
-
-  for (const client of sockets.values()) send(client, { type: 'devices', devices })
+  for (const client of sockets.values()) {
+    const devices = [...sockets.entries()]
+      .filter(([, peer]) => peer.readyState === WebSocket.OPEN && peer.device && peer.networkKey === client.networkKey)
+      .map(([id, peer]) => ({ id, ...peer.device }))
+    send(client, { type: 'devices', devices })
+  }
 }
 
-wss.on('connection', (socket) => {
+function getNetworkKey(request) {
+  const forwarded = request.headers['x-forwarded-for']
+  if (typeof forwarded !== 'string') return 'local-server'
+  const address = forwarded.split(',')[0].trim()
+  if (!address.includes(':')) return `ipv4:${address}`
+  // Group public IPv6 clients by their usual /64 LAN prefix.
+  return `ipv6:${address.replace(/^\[|\]$/g, '').split(':').slice(0, 4).join(':')}`
+}
+
+wss.on('connection', (socket, request) => {
   const id = createId()
+  socket.networkKey = getNetworkKey(request)
   sockets.set(id, socket)
   send(socket, { type: 'welcome', id })
 
@@ -83,7 +94,7 @@ wss.on('connection', (socket) => {
 
     if (message.type === 'signal' && typeof message.targetId === 'string') {
       const target = sockets.get(message.targetId)
-      if (target) {
+      if (target && target.networkKey === socket.networkKey) {
         send(target, {
           type: 'signal',
           fromId: id,
@@ -96,7 +107,7 @@ wss.on('connection', (socket) => {
 
     if (message.type === 'relay' && typeof message.targetId === 'string') {
       const target = sockets.get(message.targetId)
-      if (target) {
+      if (target && target.networkKey === socket.networkKey) {
         send(target, {
           type: 'relay',
           fromId: id,
