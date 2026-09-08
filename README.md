@@ -40,3 +40,7 @@ npm run preview
 - 无账号、无内容落盘
 
 当前版本按需求不包含断点续传和自动重试。接收文件暂存在浏览器内存中，超大文件的实际上限取决于接收设备的可用内存。
+
+## 服务器部署
+
+仓库中的 `deploy/localdrop.service` 和 `deploy/localdrop.nginx.conf` 分别是 systemd 服务与 Nginx 反向代理配置。当前生产域名为 `localdrop.zhanghongyun.cn`，应用仅监听服务器回环地址 `127.0.0.1:4173`，公网流量统一通过 Nginx HTTPS 接入。
